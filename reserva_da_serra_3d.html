@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reserva da Serra — 3D</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #1a1a2e; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; }
+  #info {
+    position: absolute; top: 16px; left: 16px; z-index: 10;
+    background: rgba(0,0,0,0.7); color: #fff; padding: 14px 18px;
+    border-radius: 8px; font-size: 13px; line-height: 1.6;
+    pointer-events: none; max-width: 280px;
+  }
+  #info h2 { font-size: 15px; margin-bottom: 6px; color: #8ecae6; }
+  #info .dim { color: #aaa; }
+  #controls {
+    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    z-index: 10; background: rgba(0,0,0,0.6); color: #ccc; padding: 8px 16px;
+    border-radius: 20px; font-size: 11px;
+  }
+  canvas { display: block; }
+  #solar-panel {
+    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    z-index: 20; background: rgba(0,0,0,0.75); color: #e8ddd0;
+    padding: 12px 18px; border-radius: 12px; font-size: 12px;
+    backdrop-filter: blur(8px); min-width: 440px;
+  }
+  #solar-panel .row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  #solar-panel .row:last-child { margin-bottom: 0; }
+  #solar-panel label { color: #999; font-size: 11px; min-width: 40px; }
+  #solar-panel input[type="range"] {
+    flex: 1; height: 5px; -webkit-appearance: none; appearance: none;
+    background: rgba(255,255,255,0.15); border-radius: 3px; outline: none;
+  }
+  #solar-panel input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+    background: #d4a054; cursor: pointer;
+  }
+  #solar-panel .time-display { font-size: 20px; font-weight: 700; color: #d4a054; min-width: 55px; text-align: center; }
+  #solar-panel .sun-data { font-size: 11px; color: #887766; display: flex; gap: 14px; flex-wrap: wrap; }
+  #solar-panel .dates { display: flex; gap: 5px; flex-wrap: wrap; }
+  #solar-panel .dates button {
+    padding: 2px 7px; border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.05); color: #b0a090; border-radius: 4px;
+    font-size: 10px; cursor: pointer;
+  }
+  #solar-panel .dates button.active { background: rgba(212,160,84,0.3); border-color: #d4a054; color: #d4a054; }
+</style>
+</head>
+<body>
+
+<div id="info">
+  <h2>Reserva da Serra — Q.10</h2>
+  <div>Lotes 01+02 unificados</div>
+  <div class="dim">1.567,99 m² · Canela/RS</div>
+  <br>
+  <div>Implantação: <strong>25 × 22m</strong> (550 m²)</div>
+  <div>Fechado: <strong>25 × 17m</strong> (425 m²)</div>
+  <div>Deck fundos: <strong>25 × 5m</strong> (125 m²)</div>
+  <div>Pé-direito 1º pav: <strong>3,5m</strong></div>
+  <div>Telhado: <strong>+1,5m</strong> · Beiral: <strong>2m</strong></div>
+  <br>
+  <div><strong>Subsolo útil: 25 × 9m</strong> (225 m²) · PD <strong>3,0m</strong></div>
+  <div>Fundação: <strong>25 × 8m</strong> (concreto, enterrada)</div>
+  <div>Laje: <strong>25cm</strong> · Deck = beiral subsolo</div>
+  <div class="dim">Total construído: <strong>~775 m²</strong> (550 + 225)</div>
+  <br>
+  <div class="dim">Rua (SE): ~800m · Fundos (NO): ~794m</div>
+  <div class="dim">Desnível: ~6m S→N</div>
+</div>
+
+<div id="solar-panel">
+  <div class="row">
+    <label>Hora</label>
+    <input type="range" id="timeSlider" min="5" max="20" step="0.1" value="10">
+    <div class="time-display" id="timeDisplay">10:00</div>
+  </div>
+  <div class="row">
+    <label>Data</label>
+    <div class="dates">
+      <button data-day="172">21 Jun · Inverno</button>
+      <button data-day="265">22 Set · Equinócio</button>
+      <button data-day="355">21 Dez · Verão</button>
+      <button data-day="80">21 Mar · Equinócio</button>
+      <button data-day="91" class="active">1 Abr · Hoje</button>
+    </div>
+  </div>
+  <div class="row">
+    <div class="sun-data">
+      <span>Azimute: <strong id="azVal">—</strong></span>
+      <span>Altitude: <strong id="altVal">—</strong></span>
+      <span>Nascer: <strong id="sunRise">—</strong></span>
+      <span>Pôr: <strong id="sunSet">—</strong></span>
+    </div>
+  </div>
+  <div class="row">
+    <label>Lote</label>
+    <input type="range" id="lotSlider" min="310" max="355" step="1" value="335">
+    <div style="font-size:11px;color:#d4a054;min-width:90px" id="lotAngle">Fundos: 315° NO</div>
+  </div>
+  <div class="row"><div style="font-size:10px;color:#665">29°22'41"S 50°50'33"W · Arrastar p/ girar · Scroll p/ zoom</div></div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ====== SETUP ======
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a2e);
+scene.fog = new THREE.Fog(0x1a1a2e, 100, 250);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 500);
+camera.position.set(-35, 18, -40);
+window.__camera = camera;
+window.__scene = scene;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+document.body.appendChild(renderer.domElement);
+window.__renderer = renderer;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+window.__controls = controls;
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.target.set(5, 3, -8);
+window.__controls = controls;
+
+// ====== LIGHTS ======
+const ambientLight = new THREE.AmbientLight(0x4a6fa5, 0.6);
+scene.add(ambientLight);
+
+const dirLight = new THREE.DirectionalLight(0xffeedd, 1.2);
+dirLight.position.set(30, 40, 20);
+dirLight.castShadow = true;
+dirLight.shadow.camera.left = -50;
+dirLight.shadow.camera.right = 50;
+dirLight.shadow.camera.top = 50;
+dirLight.shadow.camera.bottom = -50;
+dirLight.shadow.mapSize.width = 2048;
+dirLight.shadow.mapSize.height = 2048;
+scene.add(dirLight);
+
+const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x3d5c3a, 0.4);
+scene.add(hemiLight);
+
+// ====== TERRAIN DATA ======
+// Lot vertices in meters (origin at center-bottom of lot)
+// Real lot: trapezoid right-angled on the right
+// Frente (SE) = 48.13m, Fundos (NO) = 30.19m, Dir (NE) = 40m (perp), Esq (O) = 42.45m
+// Elevation: SO corner ~780m, SE corner ~790m, NO corner ~794m, NE corner ~800m
+
+// We'll place the lot centered, with SE (frente) at z=+20, NO (fundos) at z=-20
+// and left edge at x=-24, right edge at x=+24
+
+// Lot corners in 3D space (x = east-west, z = north-south, y = elevation)
+// Transform: lot is 48.13m wide at bottom, 30.19m at top, 40m deep
+const lotW_bottom = 48.13;
+const lotW_top = 30.19;
+const lotDepth = 40;
+const halfDepth = lotDepth / 2;
+
+// Lot corner positions (x, z) - centered on lot
+// Bottom-left (SO/F): front-left
+const F = { x: -lotW_bottom / 2, z: halfDepth };
+// Bottom-right (SE/D): front-right
+const D = { x: lotW_bottom / 2, z: halfDepth };
+// Top-right (NE/C): back-right
+const C = { x: lotW_bottom / 2 - 0, z: -halfDepth };  // right side is perpendicular
+// Top-left (NO/A): back-left
+// The right side is perpendicular, so C.x = D.x = lotW_bottom/2
+// Top width = 30.19, and right edge is at x = lotW_bottom/2
+// So A.x = C.x - lotW_top = lotW_bottom/2 - lotW_top
+const A = { x: lotW_bottom / 2 - lotW_top, z: -halfDepth };
+
+// Elevation function: interpolate based on position
+// Terreno DESCE da rua (SE, alto ~800m) para o córrego (NO, baixo ~794m)
+// Desnível de ~6m, principalmente na direção S→N
+// Sem desnível significativo de E para O (curvas paralelas ao fundos)
+// SE (D) ≈ 800m, SO (F) ≈ 800m, NE (C) ≈ 794m, NO (A) ≈ 794m
+function getElevation(x, z) {
+  const zMin = -halfDepth;  // fundos (NO)
+  const zMax = halfDepth;   // frente (SE)
+
+  const nz = (z - zMin) / (zMax - zMin); // 0 = fundos (baixo), 1 = frente (alto)
+
+  // Elevação depende quase exclusivamente da posição N-S
+  // Fundos (NO) = 794m, Frente (SE) = 800m
+  const elev = 794 + (800 - 794) * nz;
+
+  return elev - 794; // normalize: 0 nos fundos, 6 na frente
+}
+
+// Check if point is inside the lot trapezoid
+function isInsideLot(x, z) {
+  // The lot is bounded by:
+  // Right: x = D.x (= C.x = lotW_bottom/2)
+  // Bottom: z = halfDepth
+  // Top: z = -halfDepth
+  // Left: line from F to A
+  const leftEdgeX = F.x + (A.x - F.x) * (halfDepth - z) / (2 * halfDepth);
+  return x >= leftEdgeX && x <= D.x && z >= -halfDepth && z <= halfDepth;
+}
+
+// ====== TERRAIN MESH ======
+const terrainSize = 70;
+const segments = 80;
+const terrainGeo = new THREE.PlaneGeometry(terrainSize, terrainSize, segments, segments);
+terrainGeo.rotateX(-Math.PI / 2);
+
+const positions = terrainGeo.attributes.position;
+for (let i = 0; i < positions.count; i++) {
+  const x = positions.getX(i);
+  const z = positions.getZ(i);
+  const y = getElevation(x, z);
+  positions.setY(i, y);
+}
+terrainGeo.computeVertexNormals();
+
+// Color the terrain
+const colors = new Float32Array(positions.count * 3);
+for (let i = 0; i < positions.count; i++) {
+  const x = positions.getX(i);
+  const z = positions.getZ(i);
+  const inside = isInsideLot(x, z);
+
+  if (inside) {
+    // Lot area — light green
+    colors[i * 3] = 0.55;
+    colors[i * 3 + 1] = 0.72;
+    colors[i * 3 + 2] = 0.48;
+  } else {
+    // Surrounding — darker green/brown
+    colors[i * 3] = 0.28;
+    colors[i * 3 + 1] = 0.38;
+    colors[i * 3 + 2] = 0.25;
+  }
+}
+terrainGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+const terrainMat = new THREE.MeshStandardMaterial({
+  vertexColors: true,
+  roughness: 0.9,
+  metalness: 0.0,
+  flatShading: false,
+});
+const terrain = new THREE.Mesh(terrainGeo, terrainMat);
+terrain.receiveShadow = true;
+scene.add(terrain);
+
+// ====== LOT BOUNDARY (wire) ======
+const lotShape = new THREE.BufferGeometry();
+const lotPoints = [
+  new THREE.Vector3(A.x, getElevation(A.x, A.z) + 0.15, A.z),
+  new THREE.Vector3(C.x, getElevation(C.x, C.z) + 0.15, C.z),
+  new THREE.Vector3(D.x, getElevation(D.x, D.z) + 0.15, D.z),
+  new THREE.Vector3(F.x, getElevation(F.x, F.z) + 0.15, F.z),
+  new THREE.Vector3(A.x, getElevation(A.x, A.z) + 0.15, A.z),
+];
+lotShape.setFromPoints(lotPoints);
+const lotLine = new THREE.Line(lotShape, new THREE.LineBasicMaterial({ color: 0x2d5a27, linewidth: 2 }));
+scene.add(lotLine);
+
+// ====== CONTOUR LINES ======
+for (let elev = 794; elev <= 800; elev += 1) {
+  const isMaster = elev === 795 || elev === 800;
+  const contourPoints = [];
+  const y3d = elev - 794;
+
+  // Trace contour across the terrain
+  for (let x = -35; x <= 35; x += 0.5) {
+    // Find z where elevation = target
+    for (let z = -halfDepth - 5; z <= halfDepth + 5; z += 0.5) {
+      const e = getElevation(x, z);
+      if (Math.abs(e - y3d) < 0.3) {
+        contourPoints.push(new THREE.Vector3(x, y3d + 0.05, z));
+        break;
+      }
+    }
+  }
+
+  if (contourPoints.length > 2) {
+    const contourGeo = new THREE.BufferGeometry().setFromPoints(contourPoints);
+    const contourMat = new THREE.LineBasicMaterial({
+      color: isMaster ? 0xc9a44a : 0xa08030,
+      opacity: isMaster ? 0.5 : 0.25,
+      transparent: true,
+    });
+    scene.add(new THREE.Line(contourGeo, contourMat));
+  }
+}
+
+// ====== BUILDING ======
+// Building: 25 x 22m, centered in buildable zone
+// Position: 6m from fundos (back), centered left-right in setback zone
+const bldgW = 25;
+const bldgD = 22;
+const bldgH = 3.5; // floor to ceiling
+const roofH = 1.5; // telhado plano baixo
+
+// Building center position
+// Fundos at z = -halfDepth, 6m setback: building back at z = -halfDepth + 6
+// Building front at z = -halfDepth + 6 + bldgD
+const bldgBackZ = -halfDepth + 6;
+const bldgFrontZ = bldgBackZ + bldgD;
+const bldgCenterZ = (bldgBackZ + bldgFrontZ) / 2;
+
+// Center horizontally: in the buildable zone
+// Right setback at x = D.x - 3
+// Left setback follows the diagonal
+const bldgCenterX = (D.x - 4 + (D.x - 4) - bldgW) / 2 + bldgW / 2;
+// Simpler: right edge at D.x - 4 = 24.065 - 4 = 20.065
+const bldgRightX = D.x - 4;
+const bldgLeftX = bldgRightX - bldgW;
+const bldgMidX = (bldgLeftX + bldgRightX) / 2;
+
+// Primeiro pavimento no nível da rua = 800m = 6 na escala normalizada (800-794)
+const groundElev = 6; // cota 800m = nível da rua
+
+// Terreno sob a construção não precisa de corte — o piso está na cota 800m (nível da rua)
+// O terreno natural desce para os fundos, criando espaço sob a casa para o futuro subsolo
+terrainGeo.attributes.position.needsUpdate = true;
+terrainGeo.computeVertexNormals();
+
+// Área construída fechada: 25x17m (dos 22m, 5m são deck nos fundos)
+const enclosedD = 17; // profundidade fechada
+const deckD = 5;      // deck aberto nos fundos
+
+// Paredes — 25x17m, encostadas na frente
+const wallGeo = new THREE.BoxGeometry(bldgW, bldgH, enclosedD);
+const wallMat = new THREE.MeshStandardMaterial({
+  color: 0xf5f0e8,
+  roughness: 0.6,
+  metalness: 0.05,
+});
+const building = new THREE.Mesh(wallGeo, wallMat);
+const enclosedCenterZ = bldgBackZ + deckD + enclosedD / 2;
+building.position.set(bldgMidX, groundElev + bldgH / 2, enclosedCenterZ);
+building.castShadow = true;
+building.receiveShadow = true;
+scene.add(building);
+
+// Deck — 25x5m nos fundos: acabamento em madeira sobre a laje
+const deckGeo = new THREE.BoxGeometry(bldgW, 0.05, deckD);
+const deckMat = new THREE.MeshStandardMaterial({
+  color: 0x8B6F47,  // madeira
+  roughness: 0.85,
+  metalness: 0.0,
+});
+const deck = new THREE.Mesh(deckGeo, deckMat);
+const deckCenterZ = bldgBackZ + deckD / 2;
+deck.position.set(bldgMidX, groundElev + 0.025, deckCenterZ);
+deck.receiveShadow = true;
+scene.add(deck);
+
+// Guarda-corpo do deck (vidro transparente)
+const guardMat = new THREE.MeshStandardMaterial({
+  color: 0x88ccee,
+  transparent: true,
+  opacity: 0.25,
+  roughness: 0.1,
+  metalness: 0.3,
+});
+// Guarda-corpo fundos
+const guardBackGeo = new THREE.BoxGeometry(bldgW, 1.1, 0.05);
+const guardBack = new THREE.Mesh(guardBackGeo, guardMat);
+guardBack.position.set(bldgMidX, groundElev + 0.55, bldgBackZ);
+scene.add(guardBack);
+// Guarda-corpo lateral esquerdo do deck
+const guardSideGeo = new THREE.BoxGeometry(0.05, 1.1, deckD);
+const guardLeft = new THREE.Mesh(guardSideGeo, guardMat);
+guardLeft.position.set(bldgLeftX, groundElev + 0.55, deckCenterZ);
+scene.add(guardLeft);
+// Guarda-corpo lateral direito do deck
+const guardRight = new THREE.Mesh(guardSideGeo, guardMat);
+guardRight.position.set(bldgRightX, groundElev + 0.55, deckCenterZ);
+scene.add(guardRight);
+
+// ====== LAJE DO 1º PAVIMENTO (espessura padrão 25cm) ======
+const slabThickness = 0.25;
+// Laje cobre toda a implantação (25x22m) — fechado + deck
+const slabGeo = new THREE.BoxGeometry(bldgW, slabThickness, bldgD);
+const slabMat = new THREE.MeshStandardMaterial({
+  color: 0xc8c0b0,
+  roughness: 0.7,
+  metalness: 0.05,
+});
+const slab = new THREE.Mesh(slabGeo, slabMat);
+slab.position.set(bldgMidX, groundElev - slabThickness / 2, bldgCenterZ);
+slab.castShadow = true;
+slab.receiveShadow = true;
+scene.add(slab);
+
+// ====== SUBSOLO — duas zonas sob a casa ======
+// Zona 1: SUBSOLO ÚTIL — da fachada fundos até ~cota 797 (25×9m = 225m²)
+// Zona 2: FUNDAÇÃO/ESTRUTURA — da ~cota 797 até a rua (25×8m, concreto)
+// O deck (5m) funciona como beiral do subsolo útil
+const subPD = 3.0; // pé-direito subsolo
+const subCeiling = groundElev - slabThickness; // topo = base da laje = 5.75 (cota 799.75m)
+const subFloor = subCeiling - subPD; // piso = 2.75 (cota 796.75m)
+const subFrontZ = bldgBackZ + deckD; // fachada fundos do subsolo: z=-9 (cota 795.6m)
+const subBackZ = subFrontZ + enclosedD; // fachada rua: z=8 (cota 798.2m)
+
+// Ponto de divisão: cota 797m = z=0
+const splitZ = 0; // cota 797m — divisa entre subsolo útil e fundação
+const subUsableD = splitZ - subFrontZ; // ~9m de profundidade útil
+const subFoundD = subBackZ - splitZ;    // ~8m de fundação
+
+const subUsableCenterZ = (subFrontZ + splitZ) / 2;
+const subFoundCenterZ = (splitZ + subBackZ) / 2;
+
+// Materiais
+const subWallMat = new THREE.MeshStandardMaterial({
+  color: 0xd5cfc5, roughness: 0.7, metalness: 0.05,
+});
+const subConcreteMat = new THREE.MeshStandardMaterial({
+  color: 0x8a8278, roughness: 0.9, metalness: 0.02,
+});
+const foundationMat = new THREE.MeshStandardMaterial({
+  color: 0x6b6560, roughness: 0.95, metalness: 0.0,
+});
+
+// ── ZONA 1: SUBSOLO ÚTIL (25×9m) ──
+
+// Parede fundos (fachada principal, voltada para a vista NO)
+const subWallH = subCeiling - subFloor;
+const subWallFrontGeo = new THREE.BoxGeometry(bldgW, subWallH, 0.25);
+const subWallFront = new THREE.Mesh(subWallFrontGeo, subWallMat);
+subWallFront.position.set(bldgMidX, subFloor + subWallH / 2, subFrontZ);
+subWallFront.castShadow = true;
+scene.add(subWallFront);
+
+// Paredes laterais — zona útil (9m)
+const subUsableSideGeo = new THREE.BoxGeometry(0.25, subWallH, subUsableD);
+const subWallLeftUsable = new THREE.Mesh(subUsableSideGeo, subWallMat);
+subWallLeftUsable.position.set(bldgLeftX, subFloor + subWallH / 2, subUsableCenterZ);
+subWallLeftUsable.castShadow = true;
+scene.add(subWallLeftUsable);
+
+const subWallRightUsable = new THREE.Mesh(subUsableSideGeo, subWallMat);
+subWallRightUsable.position.set(bldgRightX, subFloor + subWallH / 2, subUsableCenterZ);
+subWallRightUsable.castShadow = true;
+scene.add(subWallRightUsable);
+
+// Parede divisória (divide subsolo útil da fundação, na cota 797)
+const subDivGeo = new THREE.BoxGeometry(bldgW, subWallH, 0.3);
+const subDiv = new THREE.Mesh(subDivGeo, subConcreteMat);
+subDiv.position.set(bldgMidX, subFloor + subWallH / 2, splitZ);
+scene.add(subDiv);
+
+// Piso do subsolo útil (laje inferior, 20cm)
+const subFloorGeo = new THREE.BoxGeometry(bldgW, 0.20, subUsableD);
+const subFloorMesh = new THREE.Mesh(subFloorGeo, slabMat);
+subFloorMesh.position.set(bldgMidX, subFloor - 0.10, subUsableCenterZ);
+subFloorMesh.receiveShadow = true;
+scene.add(subFloorMesh);
+
+// Janelas do subsolo útil — fachada fundos (pano de vidro, vista é prioridade)
+const subWinMat = new THREE.MeshStandardMaterial({
+  color: 0x6eb5d9, roughness: 0.1, metalness: 0.5, transparent: true, opacity: 0.5,
+});
+const subWinH = subPD * 0.75;
+const subWinGeo = new THREE.PlaneGeometry(bldgW - 2, subWinH);
+const subWinFront = new THREE.Mesh(subWinGeo, subWinMat);
+subWinFront.position.set(bldgMidX, subFloor + subPD * 0.5, subFrontZ - 0.14);
+subWinFront.rotation.y = Math.PI;
+scene.add(subWinFront);
+
+// Janelas laterais do subsolo útil (faixas na porção exposta)
+const subWinSideH = subPD * 0.4;
+const subWinSideD = subUsableD * 0.5;
+const subWinSideGeo = new THREE.PlaneGeometry(subWinSideD, subWinSideH);
+const subWinLeft = new THREE.Mesh(subWinSideGeo, subWinMat);
+subWinLeft.position.set(bldgLeftX - 0.14, subFloor + subPD * 0.5, subFrontZ + subWinSideD / 2 + 1);
+subWinLeft.rotation.y = -Math.PI / 2;
+scene.add(subWinLeft);
+const subWinRight = new THREE.Mesh(subWinSideGeo, subWinMat);
+subWinRight.position.set(bldgRightX + 0.14, subFloor + subPD * 0.5, subFrontZ + subWinSideD / 2 + 1);
+subWinRight.rotation.y = Math.PI / 2;
+scene.add(subWinRight);
+
+// ── ZONA 2: FUNDAÇÃO/ESTRUTURA (25×8m, concreto) ──
+
+// Paredes laterais — fundação (enterradas no terreno)
+const subFoundSideGeo = new THREE.BoxGeometry(0.25, subWallH, subFoundD);
+const subWallLeftFound = new THREE.Mesh(subFoundSideGeo, foundationMat);
+subWallLeftFound.position.set(bldgLeftX, subFloor + subWallH / 2, subFoundCenterZ);
+scene.add(subWallLeftFound);
+
+const subWallRightFound = new THREE.Mesh(subFoundSideGeo, foundationMat);
+subWallRightFound.position.set(bldgRightX, subFloor + subWallH / 2, subFoundCenterZ);
+scene.add(subWallRightFound);
+
+// Parede rua da fundação (totalmente enterrada)
+const subWallBackGeo = new THREE.BoxGeometry(bldgW, subWallH, 0.25);
+const subWallBack = new THREE.Mesh(subWallBackGeo, foundationMat);
+subWallBack.position.set(bldgMidX, subFloor + subWallH / 2, subBackZ);
+scene.add(subWallBack);
+
+// Pilares internos da fundação (sustentação, espaçados a cada ~4m)
+const pilarFoundMat = new THREE.MeshStandardMaterial({
+  color: 0x7a7570, roughness: 0.85, metalness: 0.05,
+});
+for (let px = bldgLeftX + 4; px < bldgRightX - 1; px += 5) {
+  const pilarGeo = new THREE.BoxGeometry(0.4, subWallH, 0.4);
+  const pilar = new THREE.Mesh(pilarGeo, pilarFoundMat);
+  pilar.position.set(px, subFloor + subWallH / 2, subFoundCenterZ);
+  scene.add(pilar);
+}
+
+// Piso da fundação (contrapiso)
+const foundFloorGeo = new THREE.BoxGeometry(bldgW, 0.15, subFoundD);
+const foundFloor = new THREE.Mesh(foundFloorGeo, foundationMat);
+foundFloor.position.set(bldgMidX, subFloor - 0.075, subFoundCenterZ);
+scene.add(foundFloor);
+
+// ====== PILARES DO DECK — só 2 colunas redondas nas quinas ======
+const pilarMat = new THREE.MeshStandardMaterial({
+  color: 0x888888,
+  roughness: 0.4,
+  metalness: 0.3,
+});
+
+const pilarRadius = 0.20;
+const pilarCorners = [
+  { x: bldgLeftX + 0.5, z: bldgBackZ },   // quina esquerda fundos
+  { x: bldgRightX - 0.5, z: bldgBackZ },   // quina direita fundos
+];
+for (const pp of pilarCorners) {
+  const terrElev = getElevation(pp.x, pp.z);
+  const pH = groundElev - terrElev;
+  if (pH < 0.5) continue;
+  const pGeo = new THREE.CylinderGeometry(pilarRadius, pilarRadius, pH, 16);
+  const p = new THREE.Mesh(pGeo, pilarMat);
+  p.position.set(pp.x, terrElev + pH / 2, pp.z);
+  p.castShadow = true;
+  scene.add(p);
+}
+
+// ====== JACOBSEN ROOF — beiral 2m em todo o perímetro ======
+const roofOverhang = 2.0;
+// Telhado cobre a parte fechada (25x17) + beiral 2m em volta
+// No lado dos fundos, o beiral avança 2m sobre o deck (dos 5m, 2m cobertos)
+const roofW = bldgW + roofOverhang * 2;  // 29m
+const roofD = enclosedD + roofOverhang * 2; // 21m
+const roofCenterZ = enclosedCenterZ; // centralizado sobre a parte fechada
+
+const roofGeo = new THREE.BoxGeometry(roofW, 0.2, roofD);
+const roofMat = new THREE.MeshStandardMaterial({
+  color: 0x3a3a3a,
+  roughness: 0.4,
+  metalness: 0.3,
+});
+const roof = new THREE.Mesh(roofGeo, roofMat);
+roof.position.set(bldgMidX, groundElev + bldgH + roofH, roofCenterZ);
+roof.castShadow = true;
+scene.add(roof);
+
+// Roof volume (1.5m faixa entre forro e telhado) — só sobre a parte fechada
+const roofVolGeo = new THREE.BoxGeometry(bldgW, roofH, enclosedD);
+const roofVolMat = new THREE.MeshStandardMaterial({
+  color: 0xe8e0d0,
+  roughness: 0.7,
+  metalness: 0.0,
+  transparent: true,
+  opacity: 0.3,
+});
+const roofVol = new THREE.Mesh(roofVolGeo, roofVolMat);
+roofVol.position.set(bldgMidX, groundElev + bldgH + roofH / 2, enclosedCenterZ);
+scene.add(roofVol);
+
+// ====== WINDOW STRIPS ======
+const windowMat = new THREE.MeshStandardMaterial({
+  color: 0x6eb5d9,
+  roughness: 0.1,
+  metalness: 0.5,
+  transparent: true,
+  opacity: 0.6,
+});
+
+// Front windows — fachada da rua (SE), janela em faixa
+const winFrontGeo = new THREE.PlaneGeometry(bldgW - 2, bldgH * 0.6);
+const winFront = new THREE.Mesh(winFrontGeo, windowMat);
+winFront.position.set(bldgMidX, groundElev + bldgH * 0.55, enclosedCenterZ + enclosedD / 2 + 0.01);
+scene.add(winFront);
+
+// Back windows — fachada fundos (NO), pano de vidro total voltado para a vista
+const winBackGeo = new THREE.PlaneGeometry(bldgW - 1, bldgH * 0.85);
+const winBack = new THREE.Mesh(winBackGeo, windowMat);
+winBack.position.set(bldgMidX, groundElev + bldgH * 0.47, enclosedCenterZ - enclosedD / 2 - 0.01);
+winBack.rotation.y = Math.PI;
+scene.add(winBack);
+
+// Side windows — laterais da parte fechada
+const winSideGeo = new THREE.PlaneGeometry(enclosedD - 2, bldgH * 0.4);
+const winLeft = new THREE.Mesh(winSideGeo, windowMat);
+winLeft.position.set(bldgLeftX - 0.01, groundElev + bldgH * 0.6, enclosedCenterZ);
+winLeft.rotation.y = -Math.PI / 2;
+scene.add(winLeft);
+
+const winRight = new THREE.Mesh(winSideGeo, windowMat);
+winRight.position.set(bldgRightX + 0.01, groundElev + bldgH * 0.6, enclosedCenterZ);
+winRight.rotation.y = Math.PI / 2;
+scene.add(winRight);
+
+// ====== PROTECTED TREES ======
+function addTree(x, z, height, radius, color, label) {
+  const elev = getElevation(x, z);
+
+  // Trunk
+  const trunkGeo = new THREE.CylinderGeometry(0.15, 0.2, height * 0.4, 8);
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c3d2e, roughness: 0.9 });
+  const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+  trunk.position.set(x, elev + height * 0.2, z);
+  trunk.castShadow = true;
+  scene.add(trunk);
+
+  // Crown
+  const crownGeo = new THREE.SphereGeometry(radius, 12, 8);
+  const crownMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.8 });
+  const crown = new THREE.Mesh(crownGeo, crownMat);
+  crown.position.set(x, elev + height * 0.65, z);
+  crown.castShadow = true;
+  scene.add(crown);
+
+  // Red ring marker
+  const ringGeo = new THREE.TorusGeometry(radius + 0.5, 0.1, 8, 32);
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0xff3333 });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.position.set(x, elev + 0.3, z);
+  ring.rotation.x = -Math.PI / 2;
+  scene.add(ring);
+}
+
+// A117 Araucária — ~3m from west boundary, middle height
+// SVG pos (240, 340) → in 3D coords
+// Map SVG to 3D: x_svG range 137-570 → x_3d range F.x to D.x
+// z_SVG range 150-510 → z_3d range -halfDepth to halfDepth
+function svgTo3D(sx, sy) {
+  const nx = (sx - 137) / (570 - 137);
+  const nz = (sy - 150) / (510 - 150);
+  return {
+    x: F.x + (D.x - F.x) * nx,
+    z: -halfDepth + (halfDepth - (-halfDepth)) * nz
+  };
+}
+
+const a117pos = svgTo3D(240, 340);
+addTree(a117pos.x, a117pos.z, 11, 2.5, 0x1a5e1a, 'Araucária #117');
+
+const a106pos = svgTo3D(209, 395);
+addTree(a106pos.x, a106pos.z, 9, 3.0, 0x2d8a2d, 'Figueira #106');
+
+const a3pos = svgTo3D(370, 474);
+addTree(a3pos.x, a3pos.z, 11, 2.5, 0x1a5e1a, 'Araucária #3');
+
+// ====== VEGETAÇÃO PRESERVADA (30% = 470m²) ======
+// Prioridade: margem OESTE primeiro, depois LESTE se faltar
+// Fachada frontal (entre casa e rua) LIMPA
+// Fundos (entre casa e APP) LIMPO — vista prioridade #1
+const smallTreeMat = new THREE.MeshStandardMaterial({ color: 0x3d7a3d, roughness: 0.85 });
+const smallTrunkMat = new THREE.MeshStandardMaterial({ color: 0x5c3d2e, roughness: 0.9 });
+
+function addSmallTree(x, z) {
+  const elev = getElevation(x, z);
+  const h = 4 + Math.random() * 5;
+  const r = 1.0 + Math.random() * 1.2;
+
+  const tGeo = new THREE.CylinderGeometry(0.08, 0.1, h * 0.35, 5);
+  const t = new THREE.Mesh(tGeo, smallTrunkMat);
+  t.position.set(x, elev + h * 0.175, z);
+  scene.add(t);
+
+  const cGeo = new THREE.SphereGeometry(r, 6, 5);
+  const c = new THREE.Mesh(cGeo, smallTreeMat);
+  c.position.set(x, elev + h * 0.55, z);
+  c.castShadow = true;
+  scene.add(c);
+}
+
+// Função para calcular x da margem oeste (diagonal) em dado z
+function westEdgeX(z) {
+  const nz = (z - (-halfDepth)) / (halfDepth - (-halfDepth));
+  return A.x + (F.x - A.x) * nz;
+}
+
+// MARGEM OESTE — faixa entre a divisa diagonal e o edifício (lado esquerdo)
+// Esta é a área principal de preservação (~60-70 árvores)
+for (let i = 0; i < 70; i++) {
+  const z = -halfDepth + Math.random() * (2 * halfDepth);
+  const leftX = westEdgeX(z) + 0.5;
+  const rightX = Math.min(bldgLeftX - 0.5, leftX + 12); // faixa de ~12m máx
+  if (rightX <= leftX) continue;
+
+  const x = leftX + Math.random() * (rightX - leftX);
+  if (!isInsideLot(x, z)) continue;
+
+  addSmallTree(x, z);
+}
+
+// MARGEM DIREITA — faixa entre o edifício e a divisa NE (complementar)
+// ~20 árvores para completar os 30%
+for (let i = 0; i < 20; i++) {
+  const z = -halfDepth + Math.random() * (2 * halfDepth);
+  const leftX = bldgRightX + 1;
+  const rightX = D.x - 0.5;
+  if (rightX <= leftX) continue;
+
+  const x = leftX + Math.random() * (rightX - leftX);
+  if (!isInsideLot(x, z)) continue;
+
+  // Não colocar na faixa entre casa e rua (fachada limpa)
+  if (z > bldgFrontZ + 3 && x > bldgLeftX) continue;
+
+  addSmallTree(x, z);
+}
+
+// ====== ROAD (Av. Vale do Quilombo) ======
+const roadGeo = new THREE.PlaneGeometry(60, 6);
+const roadMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.95 });
+const road = new THREE.Mesh(roadGeo, roadMat);
+road.rotation.x = -Math.PI / 2;
+road.position.set(5, 6, halfDepth + 4);
+scene.add(road);
+
+// ====== ELEVATION LABELS (contour) ======
+// Simple sprites for elevation labels
+function addLabel(text, x, y, z, color = 0xc9a44a) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 24;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
+  ctx.font = 'bold 16px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(text, 32, 18);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.7 });
+  const sprite = new THREE.Sprite(spriteMat);
+  sprite.position.set(x, y + 0.5, z);
+  sprite.scale.set(4, 1.5, 1);
+  scene.add(sprite);
+}
+
+// Add elevation labels at the right edge
+for (let elev = 794; elev <= 800; elev += 1) {
+  const y3d = elev - 794;
+  // z position: 794 at fundos (z=-halfDepth), 800 at frente (z=halfDepth)
+  const nz = (elev - 794) / (800 - 794);
+  const z = -halfDepth + nz * (2 * halfDepth);
+  addLabel(elev + 'm', D.x + 3, y3d, z);
+}
+
+// ====== SOLAR POSITION — Canela/RS ======
+// Coordenadas exatas: 29°22'41.00"S  50°50'32.98"W
+const LAT_DEG = -29.3781;
+const LON_DEG = -50.8425;
+const LAT_RAD = LAT_DEG * Math.PI / 180;
+
+// ROTAÇÃO DO LOTE: ângulo (graus) que o eixo "fundos" (-z no 3D) faz com o Norte verdadeiro
+// fundos = NO (noroeste) → bearing ≈ 315°
+// Medido no planialtimétrico: lateral perpendicular (40m) → 335.1°
+// Confirmado por perpendicular às edges frente (340°) e fundos (337°)
+let LOT_BEARING = 335; // graus do Norte (NNO) — medido do PDF vetorial
+
+function getSunPosition(dayOfYear, solarHour) {
+  const declRad = 23.45 * Math.sin((360/365 * (284 + dayOfYear)) * Math.PI / 180) * Math.PI / 180;
+  const H = (solarHour - 12) * 15 * Math.PI / 180;
+  const sinAlt = Math.sin(LAT_RAD)*Math.sin(declRad) + Math.cos(LAT_RAD)*Math.cos(declRad)*Math.cos(H);
+  const altitude = Math.asin(Math.max(-1, Math.min(1, sinAlt)));
+  const cosAz = (Math.sin(declRad) - Math.sin(LAT_RAD)*sinAlt) / (Math.cos(LAT_RAD)*Math.cos(altitude) + 0.0001);
+  let azimuth = Math.acos(Math.max(-1, Math.min(1, cosAz)));
+  if (H > 0) azimuth = 2*Math.PI - azimuth;
+  return { altitude, azimuth, altDeg: altitude*180/Math.PI, azDeg: azimuth*180/Math.PI };
+}
+
+// Azimute solar (do Norte verdadeiro) → coordenadas 3D do lote
+// O mapeamento leva em conta a rotação real do lote:
+//   -z (fundos) aponta para bearing LOT_BEARING
+//   +z (frente) aponta para LOT_BEARING + 180°
+//   +x (dir/lateral NE) aponta para LOT_BEARING + 90°  (perpendicular à direita)
+function sunTo3D(azimuth, altitude, dist) {
+  // Ângulo relativo: azimute solar menos o bearing da frente do lote
+  // Frente (+z) = LOT_BEARING + 180°
+  const frontBearing = (LOT_BEARING + 180) * Math.PI / 180;
+  const relAngle = azimuth - frontBearing;
+
+  const ca = Math.cos(altitude);
+  return new THREE.Vector3(
+    -dist * ca * Math.sin(relAngle),   // corrigido: -sin para orientação geográfica correta
+    dist * Math.sin(altitude),          // +y = cima
+    dist * ca * Math.cos(relAngle)      // +z = frente (rua/SE)
+  );
+}
+
+function getSunriseSunset(day) {
+  const d = 23.45*Math.sin((360/365*(284+day))*Math.PI/180)*Math.PI/180;
+  const c = -Math.tan(LAT_RAD)*Math.tan(d);
+  if (c < -1) return {rise:0,set:24}; if (c > 1) return {rise:12,set:12};
+  const H0 = Math.acos(c)*180/Math.PI/15;
+  return {rise:12-H0, set:12+H0};
+}
+
+// Sol visual
+const sunSphere = new THREE.Mesh(
+  new THREE.SphereGeometry(1.5,16,16),
+  new THREE.MeshBasicMaterial({ color: 0xffdd88 })
+);
+scene.add(sunSphere);
+
+// Trajetória solar (arco)
+let sunPathLine = null;
+let currentDay = 91;
+
+function drawSunPath(day) {
+  if (sunPathLine) scene.remove(sunPathLine);
+  const pts = [], ss = getSunriseSunset(day);
+  for (let h = ss.rise; h <= ss.set; h += 0.2) {
+    const sp = getSunPosition(day, h);
+    if (sp.altDeg < 0) continue;
+    pts.push(sunTo3D(sp.azimuth, sp.altitude, 55));
+  }
+  if (pts.length > 2) {
+    sunPathLine = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineBasicMaterial({ color: 0xffaa44, transparent: true, opacity: 0.4 })
+    );
+    scene.add(sunPathLine);
+  }
+}
+
+function updateSun(hour, day) {
+  const sp = getSunPosition(day, hour);
+  const ss = getSunriseSunset(day);
+
+  // UI
+  const hh = Math.floor(hour), mm = Math.floor((hour-hh)*60);
+  document.getElementById('timeDisplay').textContent = `${hh}:${mm.toString().padStart(2,'0')}`;
+  document.getElementById('azVal').textContent = `${sp.azDeg.toFixed(1)}°`;
+  document.getElementById('altVal').textContent = `${sp.altDeg.toFixed(1)}°`;
+  const rh=Math.floor(ss.rise),rm=Math.floor((ss.rise-rh)*60);
+  const sh=Math.floor(ss.set),sm=Math.floor((ss.set-sh)*60);
+  document.getElementById('sunRise').textContent = `${rh}:${rm.toString().padStart(2,'0')}`;
+  document.getElementById('sunSet').textContent = `${sh}:${sm.toString().padStart(2,'0')}`;
+
+  if (sp.altDeg > -2) {
+    const sunPos = sunTo3D(sp.azimuth, Math.max(sp.altitude, 0.02), 55);
+    sunSphere.position.copy(sunPos);
+    sunSphere.visible = sp.altDeg > 0;
+
+    dirLight.position.copy(sunTo3D(sp.azimuth, Math.max(sp.altitude, 0.05), 50));
+
+    const altF = Math.max(0, Math.sin(sp.altitude));
+    dirLight.intensity = altF * 1.5 * (sp.altDeg < 15 ? 1.5 : 1.0);
+
+    if (sp.altDeg < 10) { dirLight.color.setHex(0xff8030); sunSphere.material.color.setHex(0xff9940); }
+    else if (sp.altDeg < 25) { dirLight.color.setHex(0xffb060); sunSphere.material.color.setHex(0xffcc66); }
+    else { dirLight.color.setHex(0xffeedd); sunSphere.material.color.setHex(0xffeeaa); }
+
+    if (sp.altDeg < 0) { scene.background.setHex(0x0a0a1a); scene.fog.color.setHex(0x0a0a1a); }
+    else if (sp.altDeg < 8) { scene.background.setHex(0x2a2040); scene.fog.color.setHex(0x2a2040); renderer.toneMappingExposure = 0.8+altF*0.5; }
+    else if (sp.altDeg < 20) { scene.background.setHex(0x3a4a6a); scene.fog.color.setHex(0x3a4a6a); renderer.toneMappingExposure = 1.0; }
+    else { scene.background.setHex(0x6a8ab0); scene.fog.color.setHex(0x6a8ab0); renderer.toneMappingExposure = 1.1; }
+
+    ambientLight.intensity = 0.2 + altF * 0.5;
+    hemiLight.intensity = 0.15 + altF * 0.35;
+  } else {
+    sunSphere.visible = false;
+    dirLight.intensity = 0;
+    scene.background.setHex(0x0a0a1a); scene.fog.color.setHex(0x0a0a1a);
+    renderer.toneMappingExposure = 0.6;
+    ambientLight.intensity = 0.15; hemiLight.intensity = 0.08;
+  }
+}
+
+// UI controls
+document.getElementById('timeSlider').addEventListener('input', (e) => {
+  updateSun(parseFloat(e.target.value), currentDay);
+});
+document.querySelectorAll('#solar-panel .dates button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#solar-panel .dates button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentDay = parseInt(btn.dataset.day);
+    drawSunPath(currentDay);
+    updateSun(parseFloat(document.getElementById('timeSlider').value), currentDay);
+  });
+});
+
+// Rosa dos ventos — posição fixa relativa ao lote
+const compassSprites = [];
+function addCompassLabel(dir, azDeg) {
+  const pos = sunTo3D(azDeg*Math.PI/180, 0, 38);
+  pos.y = getElevation(0, 0) + 1.5;
+  const cv = document.createElement('canvas'); cv.width=48; cv.height=24;
+  const ctx = cv.getContext('2d'); ctx.fillStyle='#aaa'; ctx.font='bold 18px Arial'; ctx.textAlign='center'; ctx.fillText(dir,24,20);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, opacity: 0.6 }));
+  sp.position.copy(pos); sp.scale.set(4,2,1); scene.add(sp);
+  compassSprites.push({ sprite: sp, azDeg, dir });
+}
+addCompassLabel('N',0); addCompassLabel('S',180); addCompassLabel('L',90); addCompassLabel('O',270);
+
+function updateCompass() {
+  compassSprites.forEach(c => {
+    const pos = sunTo3D(c.azDeg*Math.PI/180, 0, 38);
+    pos.y = getElevation(0, 0) + 1.5;
+    c.sprite.position.copy(pos);
+  });
+}
+
+function bearingToCardinal(b) {
+  b = ((b % 360) + 360) % 360;
+  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSO','SO','OSO','O','ONO','NO','NNO'];
+  return dirs[Math.round(b / 22.5) % 16];
+}
+
+// Slider de rotação do lote
+document.getElementById('lotSlider').addEventListener('input', (e) => {
+  LOT_BEARING = parseInt(e.target.value);
+  document.getElementById('lotAngle').textContent = `Fundos: ${LOT_BEARING}° ${bearingToCardinal(LOT_BEARING)}`;
+  updateCompass();
+  drawSunPath(currentDay);
+  updateSun(parseFloat(document.getElementById('timeSlider').value), currentDay);
+});
+
+// Init solar
+drawSunPath(currentDay);
+updateSun(parseFloat(document.getElementById('timeSlider').value), currentDay);
+
+// ====== ANIMATION ======
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+// Resize handler
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
